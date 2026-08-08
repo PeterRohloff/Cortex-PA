@@ -93,6 +93,7 @@ export default function Intel({ onExit }) {
   const [toast, setToast] = useState(null);
   const [showSources, setShowSources] = useState(false);
   const [assessing, setAssessing] = useState(false);
+  const [diag, setDiag] = useState("");
   const qRef = useRef(null);
 
   const flash = (msg, ms = 3200) => { setToast(msg); setTimeout(() => setToast(null), ms); };
@@ -143,6 +144,32 @@ export default function Intel({ onExit }) {
       setLoading(false);
     }
   }, []);
+
+  // Probes the backend and reports the *exact* reason it's unreachable, so
+  // "Sample mode" becomes actionable (functions not deployed vs 500 vs network).
+  const diagnose = useCallback(async () => {
+    flash("Probing /api/intel-sources …", 2000);
+    try {
+      const r = await fetch(API.sources, { cache: "no-store" });
+      const ct = r.headers.get("content-type") || "";
+      const body = (await r.text()).slice(0, 200);
+      const isHtml = /<!doctype|<html/i.test(body);
+      const isJson = ct.includes("json") || /^[\[{]/.test(body.trim());
+      let msg;
+      if (r.ok && isJson) {
+        msg = `Backend OK (HTTP ${r.status}). Reconnecting…`;
+        setOffline(false); loadSources(); loadItems(filters, sort);
+      } else if (isHtml || r.status === 404) {
+        msg = `HTTP ${r.status}: /api/* returned the web page, not a function → the Netlify Functions didn't deploy. Check the Deploys log + Functions tab.`;
+      } else {
+        msg = `HTTP ${r.status} ${ct}: ${body}`; // e.g. a 500 with a Blobs/config error
+      }
+      setDiag(msg); flash(msg, 9000);
+    } catch (e) {
+      const msg = `No function responded (network error: ${e.message}). The site has no live /api backend.`;
+      setDiag(msg); flash(msg, 9000);
+    }
+  }, [loadSources, loadItems, filters, sort]);
 
   useEffect(() => { loadSources(); }, [loadSources]);
   // Debounced item reload on filter/sort change.
@@ -222,7 +249,7 @@ export default function Intel({ onExit }) {
             {lastRun && <span> · updated {timeAgo(lastRun.ranAt)}</span>}
           </div>
         </div>
-        {offline && <span style={{ ...chip(true, "#fbbf24"), cursor: "default" }} title="Live functions unreachable; showing sample data.">◍ Sample mode</span>}
+        {offline && <button onClick={diagnose} style={chip(true, "#fbbf24")} title={diag || "Live functions unreachable — click to diagnose why."}>◍ Sample mode · diagnose</button>}
         <button onClick={() => setShowSources(true)} style={{ ...chip(false, "#38bdf8"), padding: "8px 14px", fontSize: 12 }}>⚙︎ Sources</button>
         <button onClick={refresh} disabled={refreshing} style={{ padding: "8px 16px", borderRadius: 10, border: "none", cursor: refreshing ? "wait" : "pointer", fontFamily: FN, fontWeight: 800, fontSize: 12, color: "#fff", background: "linear-gradient(135deg,#ff6b6b,#ee5a24)", opacity: refreshing ? 0.7 : 1 }}>
           {refreshing ? "⟳ Ingesting…" : "⟳ Refresh intel"}
