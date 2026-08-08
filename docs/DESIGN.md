@@ -33,14 +33,13 @@ Author: Design draft for peter@rohlofftech.com · Date: 2026-08-08
 
 ## 1. Read this first: feasibility truths
 
-Three facts materially shape what this platform can promise. They are stated up front so the
+Two facts materially shape what this platform can promise. They are stated up front so the
 design is honest about what Microsoft 365 actually exposes.
 
 | Topic | Reality | Impact on design |
 |---|---|---|
 | **Bulk Teams collection** | The interactive endpoints (`/chats/{id}/messages`) throttle and stop paginating before old history. The **Teams Export APIs** (`getAllMessages`) are the supported bulk path — they return reactions, attachments, edits, **and deleted messages (up to 21 days)**, with date-range filtering. | Collection is built on Export APIs, not the interactive endpoints. |
 | **Cost / metering** | **As of 25 August 2025, the Teams Export and change-notification APIs are no longer metered per message.** Previously they billed ~$0.00075/msg under "model=B", or required licenses under "model=A". | The dominant historical cost driver is gone. The remaining Teams-side cost is *licensing prerequisite* (see below), not per-message fees. |
-| **Read receipts** | Microsoft Graph **does not expose true per-message, per-recipient read receipts.** The only read signal available is `chat.viewpoint.lastMessageReadDateTime` — the *acting service identity's* own last-read marker per chat, not every participant's. | The UI shows **Delivered / Edited / Deleted** status reliably, plus **best-effort "last read" markers** where derivable. We do **not** claim full iMessage-style per-user read receipts, because Graph cannot provide them. This is the one requirement that cannot be met literally; see [§7](#7-conversation-rendering) and [§15](#15-risks-legal--open-decisions). |
 
 **Licensing prerequisite (not an Azure cost).** The Export APIs run as a *security/compliance*
 application ("model=A"). Covered users generally need a supported license (Microsoft 365 E5, or
@@ -300,11 +299,6 @@ Two faithful view modes over the same normalized data, both **read-only**:
    **status chips**: *Delivered*, *Edited* (with edited timestamp), *Deleted* (tombstone with
    `deletedDateTime`). This is the fidelity view for review and export.
 
-**Read receipts — honest behavior.** Where a last-read marker is derivable
-(`chat.viewpoint.lastMessageReadDateTime`), the view shows a "last read" indicator. True
-per-message, per-recipient read receipts are **not available from Graph** and are not fabricated.
-This limitation is surfaced in the UI and in exports so no reviewer is misled.
-
 Nothing in either view is editable. There are no edit/delete affordances anywhere in the product.
 
 ---
@@ -336,6 +330,18 @@ collection pipeline ([§4.2](#42-continuous-silent-collection-continue-collectin
 new messages/threads arrive, they're appended to the case and `update_count` increments. The case
 list renders an **information bell with the number of new items**; opening the case's "New since
 last review" queue clears the count for that reviewer.
+
+**Legal-authorization gate.** The toggle cannot be enabled until the investigator ticks a required
+attestation checkbox:
+
+> ☐ *I confirm that the collection of this user's chats has been authorized by legal and is required
+> for an investigation.*
+
+The toggle stays disabled while the box is unchecked. Checking it records the attestation —
+**who confirmed, for which case/custodian, and when** — as an audit event ([§11](#11-audit-log)),
+and the same actor/timestamp are stamped on the resulting subscription so the authorization is
+traceable to the collection it enabled. Un-ticking later (or disabling the toggle) stops new
+collection and is itself audited.
 
 ---
 
@@ -392,7 +398,8 @@ for cases the caller may see. The client UI merely reflects what the server auth
 ## 11. Audit log
 
 - **What's captured:** every action — login, search, view conversation, add chat to case, create
-  case, change membership, tag, export, archive, subscription create/renew — with **timestamp,
+  case, change membership, tag, export, archive, **legal-authorization attestation**, subscription
+  create/renew — with **timestamp,
   actor display name + UPN, action, and target**.
 - **Storage:** append-only **SQL Ledger table**; the ledger's cryptographic digest makes
   after-the-fact tampering detectable.
@@ -458,7 +465,7 @@ Every explicit ask, mapped to where it's satisfied.
 | 10 | Multiple participants or one; default exposes any chat containing the searched user(s) | §6 (default OR-any-of-searched; AND to narrow) |
 | 11 | Search & filter by reactions | §5 (Reaction), §6 |
 | 12 | Selected chat shown in Teams threaded format | §7 (Teams view) |
-| 13 | Names + timestamps + read receipts | §7 — names/timestamps ✔; read receipts **best-effort** (Graph limitation, §1/§7/§15) |
+| 13 | Names + timestamps | §7 |
 | 14 | Export to HTML / Word / Excel, keeping threaded format + names + avatars | §12 |
 | 15 | Export all / range / selected set | §12 (scope selector) |
 | 16 | Read-only, nothing editable | §7, §10 |
@@ -490,15 +497,13 @@ Every explicit ask, mapped to where it's satisfied.
 
 ## 15. Risks, legal & open decisions
 
-- **Read receipts (functional gap).** Graph cannot provide per-message per-recipient read receipts.
-  We deliver Delivered/Edited/Deleted status + best-effort last-read markers and label the gap
-  clearly. *Decision needed:* accept best-effort, or drop the read-receipt claim entirely.
 - **Silent collection is a legal/policy matter, not just a technical one.** "Without the user being
   aware" is achievable technically, but covert collection of employee communications is governed by
   employment law, works-council/labor rules, and jurisdiction. The Export APIs' `model=A` is
-  explicitly for *security/compliance* use. **Confirm lawful basis and internal authorization before
-  enabling continuous collection**; consider gating it behind Platform Admin approval and always
-  auditing it.
+  explicitly for *security/compliance* use. Enabling continuous collection therefore **requires the
+  investigator to tick the legal-authorization attestation checkbox** described in
+  [§8.3](#83-continue-collecting--the-update-bell); the attestation (who confirmed, when) is written
+  to the audit log. Consider additionally gating it behind Platform Admin approval.
 - **Licensing prerequisite.** E5 / E5 Compliance coverage for custodians must be confirmed with
   your Microsoft account team; otherwise Export API calls may be blocked.
 - **Deleted-message window.** Export APIs surface deleted messages for ~21 days; older deletions and

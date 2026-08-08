@@ -19,8 +19,8 @@ requirements traceability matrix. Highlights:
 - **RBAC**: Entra ID login required; Platform Admin / Case Creator platform roles + per-case
   Owner / Member roles.
 - **Tamper-evident audit log**, admin-only, exportable to HTML and CSV.
-- One honest limitation: Microsoft Graph does not expose true per-message read receipts — see
-  §1 and §15 of the design.
+- **Continuous silent collection** is gated behind a required legal-authorization attestation
+  checkbox that is recorded to the audit log — see §8.3.
 
 > Note: the earlier Netlify/React PWA scaffold in this repo (`netlify.toml`,
 > `cortex-pwa-netlify.zip`, mail/calendar functions) predates this direction and does not meet the
