@@ -27,7 +27,20 @@ export function makeApi(msalInstance) {
     search: (body) => req('/search', { method: 'POST', body: JSON.stringify(body) }),
     getConversation: (id, caseId) => req(`/conversations/${id}?caseId=${caseId}`),
     collect: (id, body) => req(`/cases/${id}/collect`, { method: 'POST', body: JSON.stringify(body) }),
-    exportConversation: (body) => req('/export', { method: 'POST', body: JSON.stringify(body) }),
     audit: (qs) => req(`/audit?${qs}`),
+    // Exports return binary (docx/xlsx) or html — fetch as a blob and hand back
+    // the download filename from the content-disposition header.
+    exportBlob: async (body) => {
+      const t = await token();
+      const res = await fetch(`${API_BASE}/export`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      const cd = res.headers.get('content-disposition') || '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      return { blob: await res.blob(), filename: m ? m[1] : 'export' };
+    },
   };
 }

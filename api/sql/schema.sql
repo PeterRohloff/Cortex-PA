@@ -191,12 +191,27 @@ CREATE TABLE dbo.CollectionSubscription (
     subscription_id     NVARCHAR(128)    NOT NULL PRIMARY KEY,   -- Graph subscription id
     case_id             UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.[Case](case_id),
     resource            NVARCHAR(256)    NOT NULL,               -- /chats/getAllMessages etc.
+    client_state        NVARCHAR(128)    NULL,                   -- validates inbound notifications
     expires_at          DATETIME2        NULL,
     authorized_by_oid   UNIQUEIDENTIFIER NOT NULL,               -- who ticked the attestation
     authorized_by_name  NVARCHAR(256)    NULL,
     authorized_at       DATETIME2        NOT NULL DEFAULT SYSUTCDATETIME(),
     active              BIT              NOT NULL DEFAULT 1
 );
+GO
+
+/* Custodian Entra object ids a case actively monitors for continuous
+   collection. New messages whose sender matches are auto-added (design §4.2). */
+IF OBJECT_ID('dbo.CaseMonitoredUser', 'U') IS NULL
+CREATE TABLE dbo.CaseMonitoredUser (
+    case_id             UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.[Case](case_id),
+    user_oid            UNIQUEIDENTIFIER NOT NULL,
+    added_by_oid        UNIQUEIDENTIFIER NOT NULL,
+    added_at            DATETIME2        NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT PK_CaseMonitoredUser PRIMARY KEY (case_id, user_oid)
+);
+GO
+CREATE INDEX IX_CaseMonitoredUser_user ON dbo.CaseMonitoredUser(user_oid);
 GO
 
 /* ---------- Audit log (append-only LEDGER; admin-only) ------------ */

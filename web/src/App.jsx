@@ -174,11 +174,11 @@ function Conversation({ api, caseId, data }) {
     const map = {}; (reactions || []).forEach(r => { (map[r.message_id] ||= []).push(r); }); return map;
   }, [reactions]);
 
+  const [format, setFormat] = useState('html');
   const doExport = async (scope) => {
-    const html = await api.exportConversation({ caseId, conversationId: conversation.conversation_id, format: 'html', scope });
-    const blob = new Blob([html], { type: 'text/html' });
+    const { blob, filename } = await api.exportBlob({ caseId, conversationId: conversation.conversation_id, format, scope });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `${conversation.conversation_id}.html`; a.click();
+    a.download = filename; a.click();
   };
 
   return (
@@ -189,10 +189,14 @@ function Conversation({ api, caseId, data }) {
           <button className={mode === 'imessage' ? 'sel' : ''} onClick={() => setMode('imessage')}>Messages view</button>
         </div>
         <div className="exports">
-          <span className="hint">Export:</span>
+          <span className="hint">Export</span>
+          <select value={format} onChange={e => setFormat(e.target.value)}>
+            <option value="html">HTML</option>
+            <option value="word">Word</option>
+            <option value="excel">Excel</option>
+          </select>
           <button className="mini" onClick={() => doExport('all')}>All</button>
           <button className="mini" onClick={() => doExport('range')}>Range</button>
-          <button className="mini" title="Word/Excel are the next build step">Word / Excel*</button>
         </div>
       </div>
       <div className={`thread ${mode}`}>

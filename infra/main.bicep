@@ -287,6 +287,8 @@ resource funcApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'SQL_DATABASE', value: sqlDbName }
         { name: 'DATA_STORAGE_ACCOUNT', value: dataStorageName }
         { name: 'KEY_VAULT_NAME', value: keyVaultName }
+        { name: 'NOTIFICATION_BASE_URL', value: 'https://${funcAppName}.azurewebsites.net' }
+        { name: 'NOTIFICATION_CERT_NAME', value: 'cortex-notify' }
       ]
     }
   }
@@ -296,8 +298,10 @@ resource funcApp 'Microsoft.Web/sites@2023-12-01' = {
 // RBAC — grant the Function's managed identity least-privilege data access
 // ---------------------------------------------------------------------
 var blobDataContributor = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+var queueDataContributor= subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '974c5e8b-45b9-4653-ba55-5f855dd0fb88')
 var kvSecretsUser       = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
 var kvCryptoUser        = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12338af0-0e69-4776-bea7-57ae8d297424')
+var kvCertUser          = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'db79e9a7-68d1-42b4-b6f5-8b83c9a6dc96')
 
 resource raDataBlob 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(dataStorage.id, funcApp.id, blobDataContributor)
@@ -308,6 +312,18 @@ resource raFuncBlob 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(funcStorage.id, funcApp.id, blobDataContributor)
   scope: funcStorage
   properties: { roleDefinitionId: blobDataContributor, principalId: funcApp.identity.principalId, principalType: 'ServicePrincipal' }
+}
+// Queue trigger for change-notification processing (uses the func storage queues).
+resource raFuncQueue 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(funcStorage.id, funcApp.id, queueDataContributor)
+  scope: funcStorage
+  properties: { roleDefinitionId: queueDataContributor, principalId: funcApp.identity.principalId, principalType: 'ServicePrincipal' }
+}
+// Read the change-notification encryption certificate from Key Vault.
+resource raKvCert 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(kv.id, funcApp.id, kvCertUser)
+  scope: kv
+  properties: { roleDefinitionId: kvCertUser, principalId: funcApp.identity.principalId, principalType: 'ServicePrincipal' }
 }
 resource raKvSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(kv.id, funcApp.id, kvSecretsUser)

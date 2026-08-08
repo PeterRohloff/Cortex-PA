@@ -169,17 +169,34 @@ Open the SPA URL, sign in, create a case, add a custodian, and collect.
 
 ## 8. Continuous collection subscription (design §4.2)
 
-The *Continue collecting* toggle (with the legal attestation) is enforced by the API and recorded
-today; wiring the live Graph change-notification subscription requires two more pieces:
+The full pipeline is implemented — subscription create/renew, encrypted-payload decrypt, and
+persist-with-bell. One prerequisite: the **encryption certificate in Key Vault**.
 
-1. **Encryption cert in Key Vault** — create an RSA cert; give Graph the public key, keep the
-   private key in KV for the receiver to decrypt payloads.
-2. **A reachable notify URL** — `https://$API_HOST/api/notifications` (already implemented for the
-   validation handshake). Create the subscription with `includeResourceData=true`, `resource`
-   `/chats/getAllMessages`, and a renewal timer (subscriptions are short-lived).
+**8a. Create the RSA certificate** (name must match `NOTIFICATION_CERT_NAME`, default `cortex-notify`).
+The Function reads the public cert (Certificate User role) and unwraps the symmetric key with the
+private key via Key Vault crypto (Crypto User role) — the private key never leaves KV.
 
-Then complete the decrypt-and-persist TODO in `api/src/functions/graphNotifications.ts`. Until
-then, use the **backfill** path (works fully) and re-run it on a schedule as a reconciliation sweep.
+```bash
+KV=$(az deployment group show -g $RG -n main --query properties.outputs.keyVaultName.value -o tsv)
+# Grant yourself cert management on the vault first (RBAC): "Key Vault Certificates Officer".
+az keyvault certificate create --vault-name $KV --name cortex-notify \
+  --policy "$(az keyvault certificate get-default-policy)"
+```
+
+**8b. How it runs** (no extra steps — deployed with the API):
+- `POST /api/notifications` handles the Graph **validation handshake** and enqueues notifications
+  to the `notifications` Storage queue (fast ACK).
+- `process-notifications` (queue trigger) validates `clientState`, **decrypts** the resource data,
+  and — if the sender is a custodian a case monitors — appends the message and increments the
+  case's update counter (the bell). Invisible to end users.
+- `renew-subscriptions` (timer, every 15 min) extends subscriptions before they expire.
+- Enabling *Continue collecting* on a case (with the attestation) creates the tenant-wide
+  `/chats/getAllMessages` subscription and registers the custodian as monitored.
+
+> The notify URL (`https://$API_HOST/api/notifications`) must be reachable by Graph — the Function's
+> default hostname is public, which is fine for MVP. In the hardened topology, expose only this
+> route publicly (or use a dedicated notification endpoint). Run the **backfill** path on a schedule
+> as a reconciliation sweep, since notifications can arrive out of order or be missed.
 
 ---
 
@@ -214,11 +231,12 @@ then, use the **backfill** path (works fully) and re-run it on a schedule as a r
 
 **Working now:** infra as code; Entra-authenticated API with RBAC (platform + per-case roles);
 case create with auto codename + immutable case number + custodians; RBAC-filtered case list;
-search with all filters; threaded conversation read (Teams + Messages views); **HTML export** with
-chain-of-custody manifest; append-only **audit log** with HTML/CSV export; **Teams Export-API
-backfill**; the attestation-gated continue-collecting flow (recorded + audited).
+search with all filters; threaded conversation read (Teams + Messages views); **HTML, Word, and
+Excel export** with chain-of-custody manifest; append-only **audit log** with HTML/CSV export;
+**Teams Export-API backfill**; the attestation-gated continue-collecting flow; and the **live
+change-notification pipeline** (subscription create/renew + decrypt + auto-collect with the bell).
 
-**Next steps (clearly marked TODO in code):** live change-notification subscription create/renew +
-payload decrypt (§8); **Word/Excel** export writers (`exportConversation.ts` returns 501 for now);
-loading sanitized HTML bodies from Blob into the reader/export; avatar caching; CMK/BYOK + WORM
-enablement; split reader/writer identities.
+**Next steps (clearly marked TODO in code):** loading sanitized HTML message bodies from Blob into
+the reader/export (currently text); **broaden monitored-user matching** from sender-only to full
+chat membership; avatar fetch + caching; CMK/BYOK + WORM enablement; split reader/writer
+identities; move Word/Excel to hosted images for inline avatars.

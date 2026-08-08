@@ -49,10 +49,11 @@ wraps most of it. Both `api` and `web` build clean (`npm ci && npm run build`).
 ## What's implemented vs. next
 
 Working end-to-end: infra, auth/RBAC, cases (codename + case number + custodians), search, threaded
-conversation views (Teams + Messages), **HTML export** with chain-of-custody manifest, audit log +
-export, and **Teams Export-API backfill**. Clearly-marked next steps in code: live
-change-notification decrypt/persist, **Word/Excel** export writers, Blob-stored HTML bodies, avatar
-caching, and CMK/BYOK + WORM enablement. Details in the runbook's final section.
+conversation views (Teams + Messages), **HTML / Word / Excel export** with chain-of-custody
+manifest, audit log + export, **Teams Export-API backfill**, and the **live change-notification
+pipeline** (subscription create/renew + decrypt + auto-collect with the update bell). Clearly-marked
+next steps in code: Blob-stored HTML bodies, broaden monitored-user matching to full chat membership,
+avatar caching, and CMK/BYOK + WORM enablement. Details in the runbook's final section.
 
 > Note: the earlier Netlify/React PWA scaffold (`netlify.toml`, `cortex-pwa-netlify.zip`,
 > mail/calendar functions) predates this direction and is superseded by the Azure-native solution

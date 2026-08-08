@@ -1,6 +1,6 @@
-// Export a conversation (docs/DESIGN.md §12). HTML is fully implemented and
-// self-contained; Word/Excel are stubbed with a clear 501 until wired to
-// OpenXML/xlsx writers. Scope: all | range | selected message ids. Every
+// Export a conversation to HTML / Word / Excel (docs/DESIGN.md §12).
+// Preserves the threaded layout with names, timestamps, reactions, status,
+// and a chain-of-custody manifest. Scope: all | range | selected. Every
 // export is written to the immutable 'exports' container and audited.
 import { app, HttpRequest, HttpResponseInit } from '@azure/functions';
 import { BlobServiceClient } from '@azure/storage-blob';
@@ -10,6 +10,8 @@ import { query } from '../lib/db';
 import { audit } from '../lib/audit';
 import { assertCaseAccess, Forbidden } from '../lib/rbac';
 import { renderConversationHtml, ExportMessage, ExportMeta } from '../lib/export/html';
+import { renderConversationDocx } from '../lib/export/word';
+import { renderConversationXlsx } from '../lib/export/excel';
 
 interface ExportBody {
   caseId: string;
@@ -20,8 +22,15 @@ interface ExportBody {
   messageIds?: string[];
 }
 
+const FORMATS = {
+  html:  { ext: 'html', type: 'text/html; charset=utf-8' },
+  word:  { ext: 'docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+  excel: { ext: 'xlsx', type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+} as const;
+
 async function exportConversation(p: Principal, req: HttpRequest): Promise<HttpResponseInit> {
   const b = (await req.json()) as ExportBody;
+  if (!FORMATS[b.format]) return { status: 400, jsonBody: { error: 'format must be html|word|excel' } };
   try { await assertCaseAccess(p, b.caseId, 'view'); }   // Members may export
   catch (e) { if (e instanceof Forbidden) return { status: 403, jsonBody: { error: e.message } }; throw e; }
 
@@ -42,11 +51,6 @@ async function exportConversation(p: Principal, req: HttpRequest): Promise<HttpR
      FROM dbo.Message m WHERE ${where.join(' AND ')} ORDER BY m.created_at ASC`,
     params
   );
-
-  if (b.format !== 'html') {
-    // Word/Excel writers are the next implementation step (design §12).
-    return { status: 501, jsonBody: { error: `${b.format} export not yet implemented; HTML is available.` } };
-  }
 
   const caseRow = await query(`SELECT case_number, project_codename FROM dbo.[Case] WHERE case_id=@cid`, { cid: b.caseId });
   const conv = await query(`SELECT team_name, channel_name, topic FROM dbo.Conversation WHERE conversation_id=@c`, { c: b.conversationId });
@@ -72,24 +76,35 @@ async function exportConversation(p: Principal, req: HttpRequest): Promise<HttpR
     scope: b.scope === 'range' ? `Range ${b.from ?? ''}–${b.to ?? ''}` :
            b.scope === 'selected' ? `Selected (${messages.length})` : 'All',
   };
-  const html = renderConversationHtml(messages, meta);
+
+  // Render the requested format.
+  let payload: string | Buffer;
+  if (b.format === 'html') payload = renderConversationHtml(messages, meta);
+  else if (b.format === 'word') payload = await renderConversationDocx(messages, meta);
+  else payload = await renderConversationXlsx(messages, meta);
+
+  const { ext, type } = FORMATS[b.format];
+  const filename = `${meta.projectCodename.replace(/\s+/g, '_')}-${b.conversationId}.${ext}`;
 
   // Persist a read-only copy to the immutable exports container.
   try {
     const account = process.env.DATA_STORAGE_ACCOUNT!;
     const svc = new BlobServiceClient(`https://${account}.blob.core.windows.net`, new DefaultAzureCredential());
     const container = svc.getContainerClient('exports');
-    const name = `${meta.caseNumber}/${b.conversationId}-${Date.now()}.html`;
-    await container.getBlockBlobClient(name).upload(html, Buffer.byteLength(html), {
-      blobHTTPHeaders: { blobContentType: 'text/html' },
-    });
+    const name = `${meta.caseNumber}/${b.conversationId}-${Date.now()}.${ext}`;
+    const buf = Buffer.isBuffer(payload) ? payload : Buffer.from(payload);
+    await container.getBlockBlobClient(name).upload(buf, buf.length, { blobHTTPHeaders: { blobContentType: type } });
     await audit(p, { action: 'EXPORT', targetType: 'Conversation', targetId: b.conversationId,
       detail: { format: b.format, scope: b.scope, blob: name, count: messages.length } });
   } catch (e) {
     await audit(p, { action: 'EXPORT', targetType: 'Conversation', targetId: b.conversationId, result: 'Error', detail: { message: String(e) } });
   }
 
-  return { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' }, body: html };
+  return {
+    status: 200,
+    headers: { 'content-type': type, 'content-disposition': `attachment; filename="${filename}"` },
+    body: Buffer.isBuffer(payload) ? payload : payload,
+  };
 }
 
 app.http('export-conversation', {

@@ -13,6 +13,10 @@ async function token(): Promise<string> {
   return t!.token;
 }
 
+// Exposed for the subscription manager (create/renew subscriptions).
+export const getGraphToken = token;
+export const GRAPH_BASE = GRAPH;
+
 async function graphGet(url: string): Promise<any> {
   const res = await fetch(url.startsWith('http') ? url : `${GRAPH}${url}`, {
     headers: { authorization: `Bearer ${await token()}` },
