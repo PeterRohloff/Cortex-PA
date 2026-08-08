@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "namePrefix": { "value": "cortexpa" },
+    "location": { "value": "eastus" },
+    "sqlAdminObjectId": { "value": "<YOUR-ENTRA-OBJECT-ID>" },
+    "sqlAdminLoginName": { "value": "peter@rohlofftech.com" },
+    "apiAppClientId": { "value": "<API-APP-REGISTRATION-CLIENT-ID>" },
+    "deployPrivateEndpoints": { "value": true }
+  }
+}

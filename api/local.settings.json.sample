@@ -1,0 +1,13 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "TENANT_ID": "<tenant-guid>",
+    "API_APP_CLIENT_ID": "<api-app-registration-client-id>",
+    "SQL_SERVER": "<name>.database.windows.net",
+    "SQL_DATABASE": "cortex",
+    "DATA_STORAGE_ACCOUNT": "<data-storage-account>",
+    "KEY_VAULT_NAME": "<key-vault-name>"
+  }
+}

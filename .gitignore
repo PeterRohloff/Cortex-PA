@@ -1,0 +1,22 @@
+# dependencies / build output
+node_modules/
+dist/
+build/
+api/bin/
+api/obj/
+
+# local config & secrets
+.env
+.env.*
+!.env.sample
+local.settings.json
+*.local
+
+# azure functions
+.azure/
+bin/
+obj/
+
+# misc
+.DS_Store
+*.log
