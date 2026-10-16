@@ -287,6 +287,7 @@ function Select-TargetArchiveSite {
     param([Parameter(Mandatory)] $Sites, [string] $Mode = 'LeastStorage', [string] $LogPath)
 
     $list = @($Sites)
+    if ($list.Count -eq 0) { throw "Select-TargetArchiveSite: no archive sites were provided." }
     if ($list.Count -le 1) { return $list[0] }
 
     $metricName = $null

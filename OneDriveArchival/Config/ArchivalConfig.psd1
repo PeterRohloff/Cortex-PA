@@ -17,8 +17,23 @@
     # runs the scheduled task (CurrentUser\My or LocalMachine\My).
     CertificateThumbprint = 'ABCDEF0123456789ABCDEF0123456789ABCDEF01'
 
-    # Full URL of the archive site collection that will hold one library per user.
+    # Archive site collection(s) that hold one library per user.
+    #   - Supply ONE site with ArchiveSiteUrl, OR several with ArchiveSiteUrls.
+    #   - When multiple are given, existing user libraries are found across ALL of
+    #     them, and a NEW user's library is placed on the site chosen by
+    #     SiteSelectionMode. ArchiveSiteUrl (if also set) is always included.
     ArchiveSiteUrl = 'https://contoso.sharepoint.com/sites/OneDriveArchive'
+    ArchiveSiteUrls = @(
+        'https://contoso.sharepoint.com/sites/OneDriveArchive'
+        # 'https://contoso.sharepoint.com/sites/OneDriveArchive2'
+        # 'https://contoso.sharepoint.com/sites/OneDriveArchive3'
+    )
+
+    # How to choose the destination site for a NEW user library when several are
+    # configured: 'LeastStorage' (site using the least storage - default),
+    # 'LeastLibraries' (site hosting the fewest user libraries), or 'First'
+    # (always the first in the list). Both auto modes are admin-free.
+    SiteSelectionMode = 'LeastStorage'
 
     # SharePoint "-my" host for OneDrive personal sites (no trailing slash).
     MySiteHostUrl = 'https://contoso-my.sharepoint.com'

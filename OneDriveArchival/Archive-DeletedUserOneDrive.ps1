@@ -215,7 +215,12 @@ try {
         -ClientId $config.ClientId -CertificateThumbprint $config.CertificateThumbprint -LogPath $logPath
     $primaryConn = $archiveSites[0].Connection
     $forcedTarget = $null
-    if ($ArchiveSiteUrl) { $forcedTarget = $archiveSites | Where-Object { $_.Url -ieq $ArchiveSiteUrl.TrimEnd('/') } | Select-Object -First 1 }
+    if ($ArchiveSiteUrl) {
+        $forcedTarget = $archiveSites | Where-Object { $_.Url -ieq $ArchiveSiteUrl.TrimEnd('/') } | Select-Object -First 1
+        if (-not $forcedTarget) {
+            Write-ArchivalLog -LogPath $logPath -Level WARN -Message "Forced -ArchiveSiteUrl '$ArchiveSiteUrl' is not among the connected sites; falling back to automatic placement (mode $selectionMode)."
+        }
+    }
 
     # -----------------------------------------------------------------------
     # 2. Discover the users to archive (CSV feed OR Entra ID deleted-user bin)
